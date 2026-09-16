@@ -605,7 +605,7 @@ void onmessage(ws_cli_conn_t client,
 	{
 		if (parse_vless_header(msg, (size_t)size, vless_cfg.uuid, &vh) < 0)
 		{
-			fprintf(stderr, "VLESS: failed to parse header\n");
+			fprintf(stderr, "VLESS: bad header: size=%lu first4=%02x %02x %02x %02x\n", (unsigned long)size, size>0?msg[0]:0, size>1?msg[1]:0, size>2?msg[2]:0, size>3?msg[3]:0);
 			ws_close_client(client);
 			return;
 		}
