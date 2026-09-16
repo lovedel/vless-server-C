@@ -3,7 +3,7 @@ AR        = ar
 LIB_WS    = libws.a
 CFLAGS   += -Wall -Wextra -O2 -std=c99 -pedantic
 CFLAGS   += -I include -I wsserver-include
-LDLIBS    = -pthread
+LDLIBS    = $(LIB_WS) -pthread
 ARFLAGS   = cru
 
 WS_OBJ = wsserver-src/base64.o \
@@ -12,7 +12,7 @@ WS_OBJ = wsserver-src/base64.o \
 	wsserver-src/utf8.o        \
 	wsserver-src/ws.o
 
-all: vless-server vless-server-musl
+all: vless-server
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
@@ -21,15 +21,9 @@ $(LIB_WS): $(WS_OBJ)
 	$(AR) $(ARFLAGS) $(LIB_WS) $^
 
 vless-server: src/main.o $(LIB_WS)
-	$(CC) $(CFLAGS) src/main.o $(LIB_WS) -o $@ $(LDLIBS)
-
-MUSL_CC   ?= x86_64-linux-musl-gcc
-MUSL_CFLAGS = $(CFLAGS) -static
-
-vless-server-musl: src/main.o $(LIB_WS)
-	$(MUSL_CC) $(MUSL_CFLAGS) src/main.o $(LIB_WS) -o $@ $(LDLIBS)
+	$(CC) $(CFLAGS) $< -o $@ $(LDLIBS)
 
 clean:
-	rm -f $(WS_OBJ) $(LIB_WS) src/main.o vless-server vless-server-musl
+	rm -f $(WS_OBJ) $(LIB_WS) src/main.o vless-server
 
 .PHONY: all clean
