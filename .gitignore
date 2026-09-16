@@ -4,3 +4,9 @@ vless-server
 *.c~
 *.h~
 .DS_Store
+
+# Build output
+*.o
+*.a
+vless-server
+vless-server-musl
