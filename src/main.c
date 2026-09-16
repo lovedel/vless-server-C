@@ -16,6 +16,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <ws.h>
 #include "vless_server.h"
 
@@ -24,6 +25,7 @@
 #define DNS_SERVER        "223.5.5.5"
 #define DNS_PORT          53
 #define SOCK_BUF_SIZE     16384
+
 
 struct vless_config vless_cfg =
 {
@@ -577,7 +579,10 @@ void onclose(ws_cli_conn_t client)
 	pthread_mutex_unlock(&ctx->mtx);
 
 	if (ctx->remote_thread && !pthread_equal(ctx->remote_thread, pthread_self()))
-		pthread_join(ctx->remote_thread, NULL);
+	{
+		int rc = pthread_join(ctx->remote_thread, NULL);
+		(void)rc;
+	}
 
 	if (ctx->remote_fd >= 0) close(ctx->remote_fd);
 	pthread_mutex_destroy(&ctx->mtx);
@@ -647,7 +652,7 @@ void onmessage(ws_cli_conn_t client,
 			ws_close_client(client);
 			return;
 		}
-		pthread_detach(ctx->remote_thread);
+		/* Not detached: onclose() must join it before free'ing ctx. */
 
 		if (vh.raw_index < (size_t)size)
 		{
@@ -678,13 +683,45 @@ void onmessage(ws_cli_conn_t client,
 
 int main(int argc, char **argv)
 {
+	int opt, opt_idx;
 	int port = VLESS_LISTEN_PORT;
 	const char *proxy_url = NULL;
+	const char *uuid_str = NULL;
+	static struct option long_opts[] =
+	{
+		{ "port",  required_argument, 0, 'p' },
+		{ "uuid",  required_argument, 0, 'u' },
+		{ "proxy", required_argument, 0, 'P' },
+		{ "help",  no_argument,       0, 'h' },
+		{ 0, 0, 0, 0 },
+	};
 
 	signal(SIGPIPE, SIG_IGN);
 
-	if (argc > 1) port = atoi(argv[1]);
-	if (argc > 2) proxy_url = argv[2];
+	while ((opt = getopt_long(argc, argv, "p:u:P:h", long_opts, &opt_idx)) != -1)
+	{
+		switch (opt)
+		{
+			case 'p': port = atoi(optarg); break;
+			case 'u': uuid_str = optarg;   break;
+			case 'P': proxy_url = optarg;  break;
+			case 'h':
+			default:
+				fprintf(stderr, "Usage: %s [-p|--port port] [-u|--uuid uuid] [-P|--proxy url]\n", argv[0]);
+				return (opt == 'h' ? 0 : 1);
+		}
+	}
+
+	if (uuid_str)
+	{
+		if (strlen(uuid_str) != 36)
+		{
+			fprintf(stderr, "Invalid UUID length: %s\n", uuid_str);
+			return (1);
+		}
+		memset(vless_cfg.uuid, 0, sizeof(vless_cfg.uuid));
+		strncpy(vless_cfg.uuid, uuid_str, sizeof(vless_cfg.uuid) - 1);
+	}
 
 	vless_cfg.listen_port = port;
 	if (proxy_url)
@@ -714,5 +751,10 @@ int main(int argc, char **argv)
 		.evs.onmessage = onmessage,
 		.context       = &vless_cfg,
 	});
-	return 0;
+
+	/* .thread_loop = 1 makes ws_socket() non-blocking; wait forever. */
+	while (1)
+		pause();
+
+	return (0);
 }

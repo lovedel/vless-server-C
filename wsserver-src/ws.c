@@ -1040,6 +1040,23 @@ static int do_handshake(struct ws_frame_data *wfd)
 	wfd->amt_read = n;
 	wfd->cur_pos = (size_t)((ptrdiff_t)(p - (char *)wfd->frm)) + 4;
 
+	if (!strstr((const char *)wfd->frm, "Upgrade:") &&
+		!strstr((const char *)wfd->frm, "upgrade:") &&
+		!strstr((const char *)wfd->frm, "Sec-WebSocket-Key") &&
+		(strncmp((const char *)wfd->frm, "GET / ", 6) == 0 ||
+		 strncmp((const char *)wfd->frm, "GET /\r\n", 8) == 0))
+	{
+		const char *http_ok =
+			"HTTP/1.1 200 OK\r\n"
+			"Content-Type: text/plain\r\n"
+			"Content-Length: 24\r\n"
+			"Connection: close\r\n\r\n"
+			"vless is running\n";
+		if (SEND(wfd->client, http_ok, strlen(http_ok)) < 0)
+			return (-1);
+		return (-1);
+	}
+
 	/* Get response. */
 	if (get_handshake_response((char *)wfd->frm, &response) < 0)
 	{
