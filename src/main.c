@@ -441,9 +441,9 @@ static int parse_vless_header(const unsigned char *chunk, size_t chunk_len,
 	memset(vh, 0, sizeof(*vh));
 	if (chunk_len < 24) return (-1);
 
-	vh->version = chunk[0];
 	if (format_uuid(chunk + 1, uuid_str, sizeof(uuid_str)) < 0) return (-1);
 	if (strcasecmp(uuid_str, expected_uuid) != 0) return (-2);
+	vh->version = chunk[0];
 
 	vh->opt_len = chunk[17];
 	cmd_idx = 18 + vh->opt_len;
@@ -603,11 +603,26 @@ void onmessage(ws_cli_conn_t client,
 
 	if (!ctx->parsed)
 	{
-		if (parse_vless_header(msg, (size_t)size, vless_cfg.uuid, &vh) < 0)
 		{
-			fprintf(stderr, "VLESS: bad header: size=%lu first4=%02x %02x %02x %02x\n", (unsigned long)size, size>0?msg[0]:0, size>1?msg[1]:0, size>2?msg[2]:0, size>3?msg[3]:0);
-			ws_close_client(client);
-			return;
+			int prc = parse_vless_header(msg, (size_t)size, vless_cfg.uuid, &vh);
+			if (prc < 0)
+			{
+				char recv_uuid[37] = {0};
+				if (size >= 17) {
+					static const char hx[] = "0123456789abcdef";
+					int k = 0;
+					for (int i = 1; i <= 16; i++) {
+						if (i == 5 || i == 7 || i == 9 || i == 11) recv_uuid[k++] = '-';
+						recv_uuid[k++] = hx[(msg[i] >> 4) & 0xf];
+						recv_uuid[k++] = hx[msg[i] & 0xf];
+					}
+				}
+				fprintf(stderr, "VLESS: parse failed rc=%d size=%lu version=%02x recv_uuid=%s expected_uuid=%s\n",
+					prc, (unsigned long)size, size>0?msg[0]:0, recv_uuid, vless_cfg.uuid);
+				if (size >= 18) fprintf(stderr, "VLESS: opt_len=%d cmd=%d addr_type=%d\n", msg[17], size>18+msg[17]?msg[18+msg[17]]:-1, size>19+msg[17]?msg[19+msg[17]]:-1);
+				ws_close_client(client);
+				return;
+			}
 		}
 		ctx->parsed = 1;
 		ctx->resp_version = vh.version;
